@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="style.css"/>
+        <title>Le démineur</title>
+    </head>
+    <body>
+        <h1>Le démineur</h1>
+        <div class="container">
+            <div class="category">
+                <select class="level">
+                    <option value="beginner" selected>Débutant</option>
+                    <option value="intermediate">Intermédiaire</option>
+                    <option value="expert">Expert</option>
+                    <option value="master">Maître</option>
+                </select>
+            </div>
+            <div class="gamescreen">
+                <div class="header">
+                    <div class="mines">
+                        <div class="mines-count">0</div>
+                        <div>Mines</div>
+                    </div>
+                    <div class="timer">
+                        <div class="time">0</div>
+                        <div>Temps</div>
+                    </div>
+                </div>
+                <div class="board"></div>
+                <div class="footer">
+                    <button class="reset-button">Rejouer</button>
+                </div>
+            </div>
+        </div>
+
+        <script text="text/javascript">
+
+        //○ Système de classement (demander le nom en cas de victoire, et afficher le classement sous le plateau)
+            // + continuer commentaires
+
+        var Demi = function(level, els) {
+            var els = els || {};
+        
+            //difficultés
+            this.levels = {
+            beginner: {
+                dimension: 9,
+                mineCount: 10
+            },
+            intermediate: {
+                dimension: 16,
+                mineCount: 40
+            },
+            expert: {
+                dimension: 22,
+                mineCount: 100
+            },
+            master: {
+                dimension: 30,
+                mineCount: 250
+            }
+            }
+
+            // liaison HTML et instance éléments
+            var elBoard = els.screen || '.board';
+            var elTimer = els.timer || '.time';
+            var elMine = els.mine || '.mines-count';
+            var elRestartButton = els.restartButton || '.reset-button';
+            var elLevel = els.level || '.level';
+        
+            this.els = {}
+            this.els.board = document.querySelector(elBoard);
+            this.els.time = document.querySelector(elTimer);
+            this.els.mine = document.querySelector(elMine);
+            this.els.restartButton = document.querySelector(elRestartButton);
+            this.els.level = document.querySelector(elLevel);
+        
+            //initialisation grille, nombre de bombes et timer
+            this.dimension = 0;
+            this.mineCount = 0;
+            this.timer = null;
+        
+            //instance level 
+            this.setLevel(level);
+        
+            this.isGameOver = false;
+            this.initialize = false;
+            this.time = 0;
+            this.leftMineCount = this.mineCount;
+            this.board = new Board(this.els.board);
+        
+            this.init();
+        }
+        
+        //instance difficultés ( plus difficile => plus grande grille + plus gros nombre de bombes)
+        Demi.prototype.setLevel = function(level) {
+            var option;
+        
+            this.dimension = this.levels[level].dimension;
+            this.mineCount = this.levels[level].mineCount
+        
+            option = this.els.level.querySelector('option[value="'+ level +'"]');
+            option.selected = true;
+        }
+        
+        //initialisation démarrage chrono
+        Demi.prototype.startTimer = function() {
+            this.timer = setInterval(function() {
+            ++this.time;
+            this.els.time.textContent = this.time;
+            }.bind(this), 1000);
+        }
+        
+        //stop chrono
+        Demi.prototype.stopTimer = function() {
+            clearInterval(this.timer);
+        }
+        
+        //initialisation fonction de base 
+        Demi.prototype.init = function() {
+            this.isGameOver = false;
+            this.time = 0;
+            this.els.time.textContent = 0;
+            this.els.mine.textContent = this.mineCount;
+            this.leftMineCount = this.mineCount;
+        
+            this.stopTimer();
+            this.board.init(this.dimension, this.mineCount);
+            
+            if (! this.initialize) {
+            this.listen();
+            }
+        
+            this.initialize = true;
+        }
+        
+        //Jeu gagné 
+        Demi.prototype.isWin = function() {
+            return this.board.getNotReleavedZones().length <= this.mineCount;
+        }
+
+        //Fin de game, stop chrono, affichage gagné/perdu
+        Demi.prototype.gameover = function(isWin) {
+            var win = isWin || false;
+            var lose = !win; 
+        
+            this.isGameOver = true;
+            this.stopTimer();
+            this.board.reveal();
+            
+        
+            if (win) {
+                this.stopTimer();
+                alert('Vous avez gagné, bravo !');
+            }
+            if (lose){
+                this.stopTimer();
+                alert('Vous avez perdu, nullos...');
+                
+            }
+        }
+        
+        //Ecoute évènements
+        Demi.prototype.listen = function() {
+            this.els.restartButton.addEventListener('click', this.restartClickHandler.bind(this));
+            this.els.level.addEventListener('change', this.levelChangeHandler.bind(this));
+            this.board.element.addEventListener('click', this.leftClickHandler.bind(this));
+            this.board.element.addEventListener('contextmenu', this.rightClickHandler.bind(this));
+        }
+        
+        //Bouton reset => restart le jeu //Entend si bouton reset cliqué 
+        Demi.prototype.restartClickHandler = function() {
+            this.init();
+        }
+        
+        //Changement de level // Entend si changement de difficultés
+        Demi.prototype.levelChangeHandler = function(event) {
+            this.setLevel(event.target.value);
+            this.init();
+        }
+        
+        //Click gauche souris // Entend le click gauche de la souris dans la grille 
+        Demi.prototype.leftClickHandler = function(event) {
+            if (this.isGameOver || ! event.target.classList.contains('zone')) {
+            return;
+            }
+        
+            var zone = this.findZoneByEvent(event);
+        
+            //lance timer
+            if (this.time == 0) {
+            this.startTimer();
+            }
+        
+            //zone avec drapeau
+            if (zone.isFlagged) {
+            return;
+            }
+        
+            //si zone minée => game terminée et révèle grille
+            if (zone.isMine) {
+            zone.element.classList.add('is-clicked');
+            return this.gameover();
+            }
+        
+            zone.reveal();
+        
+            // si zone vide => cases adjacentes révélées 
+            if (zone.isEmpty) {
+            this.board.revealZoneNeighbors(zone);
+            }
+        
+            //si partie gagnée => partie terminée 
+            if (this.isWin()) {
+            return this.gameover(true);
+            }
+        }
+        
+        //Click droit souris // Entend le click droit de la souris pour afficher un drapeau dans la grille
+        Demi.prototype.rightClickHandler = function(event) {
+            event.preventDefault();
+        
+            if (this.isGameOver || ! event.target.classList.contains('zone')) {
+            return;
+            }
+            var zone = this.findZoneByEvent(event);
+        
+            //si drapeau déjà présent => enlève le drapeau et le compteur de bombes augmente
+            if (zone.isFlagged) {
+            this.increaseLeftMineCount();
+            zone.setUnflagged();
+            } else { //sinon => ajoute un drapeau et le compteur de bombes baisse
+            this.decreaseLeftMineCount();
+            zone.setFlagged();
+            }
+        }
+        
+        Demi.prototype.findZoneByEvent = function(event) {
+            var x = event.target.getAttribute('x');
+            var y = event.target.getAttribute('y');
+            return this.board.zones[y][x];
+        }
+        
+        //Fonction baisse compteur de bombes
+        Demi.prototype.decreaseLeftMineCount = function() {
+            this.leftMineCount--;
+            this.els.mine.textContent = this.leftMineCount;
+        }
+        
+        //Fonction augmentation compteur de bombes 
+        Demi.prototype.increaseLeftMineCount = function() {
+            this.leftMineCount++;
+            this.els.mine.textContent = this.leftMineCount;
+        }
+        
+        // Instance de la grille
+        var Board = function(element) {
+            this.element = element;
+            this.dimension = 0;
+            this.mineCount = 0;
+            this.zones = [];
+        
+            this.init = function(dimension, mineCount) {
+            this.dimension = dimension;
+            this.mineCount = mineCount;
+        
+            this.draw();
+            this.plantMines();
+            this.calculate();
+            }
+        
+            this.traverse = function(zone) {
+            var zones = [];
+        
+            //Haut
+            if (zone.y != 0) {
+                zones.push(this.zones[zone.y - 1][zone.x]);
+            }
+            //Bas
+            if (zone.y != this.dimension - 1) {
+                zones.push(this.zones[zone.y + 1][zone.x]);
+            }
+            //Gauche
+            if (zone.x != 0) {
+                zones.push(this.zones[zone.y][zone.x - 1]);
+            }
+            //Droite
+            if (zone.x != this.dimension - 1) {
+                zones.push(this.zones[zone.y][zone.x + 1]);
+            }
+            //Haut-gauche
+            if (zone.y != 0 && zone.x != 0) {
+                zones.push(this.zones[zone.y - 1][zone.x - 1]);
+            }
+            //Haut-droit
+            if (zone.y != 0 && zone.x != this.dimension - 1) {
+                zones.push(this.zones[zone.y - 1][zone.x + 1]);
+            }
+            //Bas-gauche
+            if (zone.y != this.dimension - 1 && zone.x != 0) {
+                zones.push(this.zones[zone.y + 1][zone.x - 1]);
+            }
+            //Bas-droit
+            if (zone.y != this.dimension - 1 && zone.x != this.dimension - 1) {
+                zones.push(this.zones[zone.y + 1][zone.x + 1]);
+            }
+        
+            return zones;
+            }
+        
+            this.reveal = function() {
+            for (var y = 0; y < this.dimension; y++) {
+                Array.prototype.forEach.call(this.zones[y], function(zone) {
+                    zone.reveal();
+                });
+            }
+            }
+        
+            //Reveal cases adjacentes aux cases qui sont vides sauf si déjà révélée, avec drapeau ou minée 
+            this.revealZoneNeighbors = function(zone) {
+            var x,
+            neighborZone,
+            neighbors = this.traverse(zone);
+        
+            for (x = 0; x < neighbors.length; x++) {
+                neighborZone = neighbors[x];
+        
+                if (neighborZone.isRevealed || neighborZone.isFlagged || neighborZone.isMine) {
+                    continue;
+                }
+                neighborZone.reveal();
+                if (neighborZone.isEmpty) {
+                    this.revealZoneNeighbors(neighborZone);
+                }
+            }
+            }
+        
+            // troouver nombre random 
+            this.getRandomNumber = function(max) {
+            return Math.floor(Math.random() * (max - 1)) + 1;
+            }
+        
+            this.draw = function() {
+            this.element.innerHTML = "";
+            var zone, br;
+        
+            for (var y = 0; y < this.dimension; y++) {
+                this.zones[y] = [];
+        
+                for (var x = 0; x < this.dimension; x++) {
+                    zone = document.createElement('span');
+                    zone.className = 'zone';
+                    zone.setAttribute('x', x);
+                    zone.setAttribute('y', y);
+                    this.element.appendChild(zone);
+                    this.zones[y][x] = new Zone(zone, x, y);
+                }
+        
+                this.appendClearfixElement();
+            }
+        
+            this.appendClearfixElement();
+            }
+        
+            this.appendClearfixElement = function() {
+            var element = document.createElement('div');
+            element.classList.add('clearfix');
+            this.element.appendChild(element);
+            }
+        
+            //instancier mines dans la grille 
+            this.plantMines = function() {
+            var plantedMines = 0;
+            var x,y,zone;
+        
+            while (plantedMines < this.mineCount) {
+                x = this.getRandomNumber(this.dimension);
+                y = this.getRandomNumber(this.dimension);
+                zone = this.zones[y][x];
+        
+                if (! zone.isMine) {
+                    zone.setMine();
+                    plantedMines++;
+                }
+            }
+            }
+        
+            this.calculate = function() {
+            var x, y, zone, mineCount;
+        
+            for (y = 0; y < this.dimension; y++) {
+                for (x = 0; x < this.dimension; x++) {
+                    zone = this.zones[y][x];
+                    var zones = this.traverse(zone);
+                    mineCount = 0;
+        
+                    if (! zone.isMine) {
+                        Array.prototype.forEach.call(zones, function(zoneVal) {
+                        if (zoneVal.isMine) {
+                            mineCount++
+                        }
+                        }.bind(this));
+        
+                        (mineCount == 0) ? zone.setEmpty() : zone.setMineCount(mineCount);
+                    }
+                }
+            }
+            }
+        
+            this.getFlattenZones = function() {
+            return this.zones.reduce(function(a, b) {
+                return a.concat(b);
+            });
+            }
+        
+            this.getNotReleavedZones = function() {
+            return this.getFlattenZones().filter(function(zone) {
+                return !zone.isRevealed;
+            });
+            }
+        }
+        
+        // Zone
+        var Zone = function(element, x, y) {
+            this.element = element;
+            this.x = x;
+            this.y = y;
+            this.isMine = false;
+            this.isRevealed = false;
+            this.isFlagged = false;
+            this.isEmpty = false;
+            this.mineCount = 0;
+        
+            this.setMine = function() {
+            this.isMine = true;
+            }
+        
+            this.setRevealed = function() {
+            this.isRevealed = true;
+            this.element.classList.add('is-revealed');
+            }
+        
+            this.reveal = function() {
+            var className;
+        
+            this.setRevealed();
+        
+            //Ajout d'une image de bombe sur une case mine et devient rouge si cliquée 
+            if (this.isMine) {
+                return this.element.classList.add('is-mine');
+            }
+            //Grisage d'une case vide
+            if (this.isEmpty) {
+                return this.element.classList.add('is-empty');
+            }
+        
+            this.element.textContent = this.mineCount;
+        
+            //si 1 bombe à côté => affiche un 1 bleu sur la case
+            if (this.mineCount == 1) {
+                className = 'is-low';
+            //si 2 bombes à côté => affiche un 2 vert sur la case
+            } else if (this.mineCount < 3) {
+                className = 'is-medium';
+            //si 3 ou plus bombes à côté => affiche un 3/4/.. en rouge sur la case
+            } else if (this.mineCount >= 3) {
+                className = 'is-high';
+            }
+        
+            this.element.classList.add(className);
+            }
+        
+            //Ajout image de drapeau si click droit sur une case
+            this.setFlagged = function() {
+            this.isFlagged = true;
+            this.element.classList.add('is-flagged');
+            }
+
+            //Retrait image de drapeau si click droit sur une case déjà avec un drapeau
+            this.setUnflagged = function() {
+            this.isFlagged = false;
+            this.element.classList.remove('is-flagged');
+            }
+        
+            this.setEmpty = function() {
+            this.isEmpty = true;
+            }
+        
+            this.setMineCount = function(number) {
+            this.mineCount = number;
+            }
+        }
+        
+        new Demi('beginner');
+                    
+        </script>
+    </body>
+</html>
